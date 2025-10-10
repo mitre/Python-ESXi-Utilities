@@ -1,0 +1,2 @@
+global-include *.py *.textfsm
+global-exclude *.py[cod]

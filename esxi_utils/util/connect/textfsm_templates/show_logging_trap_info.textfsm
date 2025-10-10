@@ -1,0 +1,28 @@
+Value Filldown SyslogStatus (\S+)
+Value Address (\d+(\.\d+){3})
+Value udp (\d+)
+Value AuditStatus (\S+)
+Value linkStatus (\S+)
+Value xmlStatus (\S+)
+Value SequenceNumberStatus (\S+)
+Value FilterStatus (\S+)
+Value Fillup Interface (\S+)
+
+Start
+  ^\s*Syslog logging: ${SyslogStatus}
+  ^\s*Trap logging: level informational, \d+ message lines logged -> TrapLogging
+  
+
+TrapLogging
+  ^\s*Logging Source-Interface:       VRF Name: -> Interface
+  ^\s*Logging to ${Address}  \(udp port ${udp}, audit ${AuditStatus},
+  ^\s*link ${linkStatus}\).*
+  ^\s*xml ${xmlStatus}, sequence number ${SequenceNumberStatus}
+  ^\s*filtering ${FilterStatus} -> Record
+  
+
+Interface
+  ^\s*${Interface} -> TrapLogging
+
+
+

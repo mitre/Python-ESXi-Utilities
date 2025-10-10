@@ -1,0 +1,20 @@
+Value Key Exporter (\S+)
+Value Destination (\d+(\.\d+){3})
+Value Source (\S+)
+Value udp (\d+)
+Value Timeout (\d+)
+
+Start
+  ^! -> Exporter
+  
+Exporter
+  ^flow exporter ${Exporter}
+  ^\s*destination ${Destination}
+  ^\s*source ${Source}
+  ^\s*transport udp ${udp}
+  ^\s*template data timeout ${Timeout}
+  ^! -> Record
+  
+
+
+
