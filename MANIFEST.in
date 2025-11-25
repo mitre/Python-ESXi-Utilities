@@ -1,2 +1,3 @@
-global-include *.py *.textfsm
+global-include *.py
 global-exclude *.py[cod]
+recursive-include esxi_utils/util/connect/textfsm_templates *.textfsm
