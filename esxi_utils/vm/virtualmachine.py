@@ -23,6 +23,7 @@ import time
 import ssl
 import re
 import os
+import datetime
 
 if typing.TYPE_CHECKING:
 	from esxi_utils.client import ESXiClient
@@ -751,6 +752,20 @@ class VirtualMachine:
 		Whether the VM is currently powered off.
 		"""
 		return self._vim_vm.runtime.powerState == pyVmomi.vim.VirtualMachine.PowerState.poweredOff
+
+	@property
+	def runtimeConnected(self) -> bool:
+		"""
+		Whether the VM is currently runtime connected
+		"""
+		return str(self._vim_vm.runtime.connectionState).lower() == 'connected'
+	
+	@property
+	def bootTime(self) -> datetime.datetime:
+		"""
+		The time the VM was booted
+		"""
+		return self._vim_vm.runtime.bootTime
 
 	@property
 	def vcpus(self) -> int:
