@@ -849,3 +849,88 @@ class DatastoreFile:
 				raise ValueError(f"Unable to resolve datastore path {filepath}: {str(e)}")
 		raise ValueError(f"Unable to resolve path {filepath}")
 
+	def _get_files_with_mtime(self, recursive: bool = False) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
+			"""
+			Like _get_files(), but also includes modification time (mtime) when available.
+			This time can be used to located the 'most recently created' files for files such as ISOs.
+			Returns: { relpath: {size, isfile, mtime} }
+			"""
+			spec = pyVmomi.vim.host.DatastoreBrowser.SearchSpec(
+				details=pyVmomi.vim.host.DatastoreBrowser.FileInfo.Details(
+					fileSize=True,
+					modification=True,
+				)
+			)
+
+			if recursive:
+				task = self.datastore._datastore.browser.SearchDatastoreSubFolders_Task(
+					datastorePath=self.path,
+					searchSpec=spec
+				)
+			else:
+				task = self.datastore._datastore.browser.SearchDatastore_Task(
+					datastorePath=self.path,
+					searchSpec=spec
+				)
+
+			results = self.datastore._client._wait_for_task(task)
+			if not isinstance(results, list):
+				results = [results]
+
+			paths: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
+			base = f"[{self.datastore.name}]"
+
+			for result in results:
+				folder_path = result.folderPath.replace(base, "", 1).strip()
+				for f in result.file:
+					rel = os.path.join(folder_path, f.path)
+					rel = self._sanitize(rel)
+
+					isfile = not isinstance(f, pyVmomi.vim.host.DatastoreBrowser.FolderInfo)
+					mtime = getattr(f, "modification", None) if isfile else None
+
+					paths[rel] = {
+						"size": getattr(f, "fileSize", 0),
+						"isfile": isfile,
+						"mtime": mtime,  # typically a datetime.datetime or None
+					}
+			return paths
+
+	def latest_file(
+		self,
+		recursive: bool = False,
+		name_regex: typing.Optional[str] = None,
+	) -> typing.Optional["DatastoreFile"]:
+		"""
+		Return the latest file in this directory based on datastore-reported modification time.
+
+		:param recursive: If True, consider subfolders as well.
+		:param name_regex: Optional regex to filter filenames
+		:return: DatastoreFile for the latest file, or None if no matching files exist.
+		"""
+		if not self.isdir:
+			raise Exception(f"{self.relpath} is not a directory")
+
+		stats = self._get_files_with_mtime(recursive=recursive)
+
+		candidates: typing.List[typing.Tuple["DatastoreFile", typing.Any]] = []
+		for rel, meta in stats.items():
+			if not meta["isfile"]:
+				continue
+
+			f = DatastoreFile(self.datastore, rel)
+
+			if name_regex and not re.search(name_regex, f.filename):
+				continue
+
+			key = meta.get("mtime")
+			if key is None:
+				continue
+
+			candidates.append((f, key))
+
+		if not candidates:
+			return None
+
+		candidates.sort(key=lambda x: x[1])
+		return candidates[-1][0]
