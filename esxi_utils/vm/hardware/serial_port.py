@@ -94,8 +94,52 @@ class VirtualSerialPortList(VirtualDeviceList):
         idempotent: bool = True,
     ) -> "VirtualSerialPort":
         """
-        Add a serial port backed by a datastore file, equivalent to:
-          backing: type=file, file_path="[datastore] path", yield_on_poll=true
+        Add a serial port backed by a datastore file.
+
+        Arguments:
+        - filepath: typing.Union["DatastoreFile", str]
+            The datastore location where ESXi will write the serial output log.
+
+            Acceptable forms:
+            - DatastoreFile:
+                A DatastoreFile whose .path is already in ESXi datastore notation, e.g.
+                "[datastore1] logs/vm-serial.log"
+            - str:
+                A datastore-path string in that same notation, e.g.
+                "[datastore1] logs/vm-serial.log"
+
+            This value is applied to:
+                vim.vm.device.VirtualSerialPort.FileBackingInfo.fileName
+
+        - yield_on_poll: bool = True
+            Sets the serial device's yieldOnPoll behavior (vim.vm.device.VirtualSerialPort.yieldOnPoll).
+
+            When True, the virtual device yields CPU when the guest polls the serial port while no data
+            is available. This can reduce CPU usage for guests that aggressively poll the serial port.
+
+            This corresponds to Ansible's:
+                yield_on_poll: true
+
+        - start_connected: bool = True
+            Sets connectable.startConnected (vim.vm.device.VirtualDevice.ConnectInfo.startConnected).
+
+            When True, ESXi will attempt to connect the serial device automatically when the VM powers on.
+            When False, the serial device starts disconnected and must be connected manually.
+
+            For file-backed logging you typically want True so logging begins immediately at boot.
+
+        - allow_guest_control: bool = True
+            Sets connectable.allowGuestControl (vim.vm.device.VirtualDevice.ConnectInfo.allowGuestControl).
+
+            When True, the guest is permitted (where supported) to connect/disconnect the serial device.
+            When False, connection state is controlled only by ESXi/vSphere configuration/UI/API.
+
+        - idempotent: bool = True
+            When True, the method checks whether a serial port already exists with the same file backing
+            path and returns that existing port rather than adding a duplicate.
+
+            When False, the method will always attempt to add a new serial port, which can create
+            duplicates if called multiple times with the same filepath.
         """
         file: DatastoreFile
         if isinstance(filepath, str):
@@ -154,17 +198,78 @@ class VirtualSerialPortList(VirtualDeviceList):
         Add a serial port backed by a network URI (ESXi 7+ supported).
 
         Recommended (raw TCP):
-          - Listen on ESXi host:
-              service_uri="tcp://:7000", direction="server"
-          - Connect outward:
-              service_uri="tcp://10.0.0.10:7000", direction="client"
+        - Listen on ESXi host:
+            service_uri="tcp://:7000", direction="server"
+        - Connect outward:
+            service_uri="tcp://10.0.0.10:7000", direction="client"
 
         Also commonly accepted:
-          - "telnet://:7000" (adds telnet semantics)
+        - "telnet://:7000" (adds telnet semantics)
 
         Notes:
         - ESXi firewall must allow the chosen port for inbound "server" mode.
         - proxy_uri/proxy_direction are typically used in vCenter/proxy scenarios; usually None on standalone ESXi.
+
+        Arguments:
+        - service_uri: str
+            The URI that defines how the serial port connects over the network.
+
+            Common ESXi 7+ forms:
+            - "tcp://:7000"
+                ESXi listens on port 7000 (when direction="server")
+            - "tcp://10.0.0.10:7000"
+                ESXi connects to 10.0.0.10:7000 (when direction="client")
+            - "telnet://..."
+                Similar, but with telnet negotiation semantics
+
+            This value is applied to:
+                vim.vm.device.VirtualSerialPort.URIBackingInfo.serviceURI
+
+        - direction: str = "server"
+            Controls whether ESXi listens locally or connects outward.
+            This is applied to:
+                vim.vm.device.VirtualSerialPort.URIBackingInfo.direction
+
+            Valid values:
+            - "server"
+                ESXi listens; you connect to the ESXi host/port from your terminal/tool (e.g. nc/telnet).
+            - "client"
+                ESXi initiates an outbound connection to the host/port specified in service_uri.
+
+        - yield_on_poll: bool = True
+            Sets vim.vm.device.VirtualSerialPort.yieldOnPoll.
+
+            When True, reduces CPU usage for guests that poll the serial device with no data available.
+
+        - start_connected: bool = True
+            Sets connectable.startConnected (vim.vm.device.VirtualDevice.ConnectInfo.startConnected).
+
+            When True, the serial connection is attempted automatically at VM power-on.
+            When False, the serial device starts disconnected and must be connected manually.
+
+        - allow_guest_control: bool = True
+            Sets connectable.allowGuestControl (vim.vm.device.VirtualDevice.ConnectInfo.allowGuestControl).
+
+            When True, the guest is permitted (where supported) to connect/disconnect the serial device.
+            When False, only ESXi/vSphere configuration/UI/API controls connection state.
+
+        - idempotent: bool = True
+            When True, the method checks for an existing URI-backed serial port with a matching service_uri
+            and direction (and, if provided, matching proxy settings) and returns it instead of adding a duplicate.
+
+        - proxy_uri: typing.Optional[str] = None
+            Optional proxy endpoint for the serial connection.
+            Applied to:
+                vim.vm.device.VirtualSerialPort.URIBackingInfo.proxyURI
+
+            Usually None for standalone ESXi. Primarily relevant in proxied/vCenter-style workflows.
+
+        - proxy_direction: typing.Optional[str] = None
+            Optional proxy direction, typically "server" or "client".
+            Applied to:
+                vim.vm.device.VirtualSerialPort.URIBackingInfo.proxyDirection
+
+            Usually left as None unless proxy_uri is set and your environment requires it.
         """
         assert (
             isinstance(service_uri, str) and len(service_uri.strip()) > 0
