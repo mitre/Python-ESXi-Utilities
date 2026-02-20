@@ -13,6 +13,7 @@ from esxi_utils.vm.hardware.disk import VirtualDiskList
 from esxi_utils.vm.hardware.cdrom import VirtualCdromList
 from esxi_utils.vm.hardware.floppy import VirtualFloppyList
 from esxi_utils.vm.hardware.video_card import VirtualVideoCardList
+from esxi_utils.vm.hardware.serial_port import VirtualSerialPortList
 import urllib
 import urllib.request
 import pyVmomi
@@ -664,6 +665,13 @@ class VirtualMachine:
 		The video cards assigned to this VM.
 		"""
 		return VirtualVideoCardList(self)
+	
+	@property
+	def serial_ports(self) -> 'VirtualSerialPortList':
+		"""
+		The serial ports attached to this VM.
+		"""
+		return VirtualSerialPortList(self)
 
 	@property
 	def snapshots(self) -> 'SnapshotList':
