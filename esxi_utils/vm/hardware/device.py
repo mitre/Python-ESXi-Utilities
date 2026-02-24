@@ -20,6 +20,7 @@ class VirtualDeviceList:
 		from esxi_utils.vm.hardware.cdrom import VirtualCdrom
 		from esxi_utils.vm.hardware.floppy import VirtualFloppy
 		from esxi_utils.vm.hardware.video_card import VirtualVideoCard
+		from esxi_utils.vm.hardware.serial_port import VirtualSerialPort
 
 		devices = []
 		for obj in self._vim_vm.config.hardware.device:
@@ -35,6 +36,8 @@ class VirtualDeviceList:
 				device = VirtualFloppy(self._vm, key)
 			elif isinstance(obj, pyVmomi.vim.vm.device.VirtualVideoCard):
 				device = VirtualVideoCard(self._vm, key)
+			elif isinstance(obj, pyVmomi.vim.vm.device.VirtualSerialPort):
+				device = VirtualSerialPort(self._vm, key)
 			else:
 				device = VirtualDevice(self._vm, key)
 			devices.append(device)
