@@ -35,9 +35,14 @@ class VirtualMachineList:
 	The collection of all virtual machines on the ESXi host.
 
 	:param client: The `ESXiClient` for the ESXi host.
+	:param container: The ESXi container object to use when listing VMs
+	:param legacy_list: When collecting all Virtual Machines from the ESXi server, this setting decides whether the VMs collected are only from the child server on vCenter (True) or if the VM list contains all VMs as seen via the vCenter inventory (False).
 	"""
-	def __init__(self, client: 'ESXiClient'):
+	def __init__(self, client: 'ESXiClient', container=None, legacy_list=False):
 		self._client = client
+		# optional vim.Folder (rootFolder, datacenter.vmFolder, etc.)
+		self.container = container
+		self.is_legacy_list = legacy_list
 
 	def __iter__(self) -> typing.Iterator['VirtualMachine']:
 		from esxi_utils.vm.types.ostype import OSType
@@ -562,10 +567,37 @@ class VirtualMachineList:
 	def _get_vim_vm_objects(self) -> typing.List[typing.Any]:
 		"""
 		Get all pyVmomi VM objects.
+		Updated 16MAR2026: this now provides a view of all VMs on all child hosts in vCenter.
+		If you want the previous behavior, collect the list with is_legacy_list set to True.
 
 		:return: A list of all pyVmomi VM objects.
 		"""
-		return [ vm for vm in self._client._get_vim_objects(pyVmomi.vim.VirtualMachine) ]
+		if self.is_legacy_list:
+			return [ vm for vm in self._client._get_vim_objects(pyVmomi.vim.VirtualMachine) ]
+
+		# The 'new' way is to discover all VMs from the vCenter level if available using 'container' views
+		content = self._client._content()
+
+		# If caller provided a container, use it
+		if self._container is not None:
+			container = self._container
+		else:
+			# vCenter: default to inventory-wide search
+			if self._client.is_vcenter():
+				container = content.rootFolder
+			else:
+				# standalone ESXi: host-scoped is fine
+				container = self._client._host_system
+
+		view = content.viewManager.CreateContainerView(
+			container=container,
+			type=[pyVmomi.vim.VirtualMachine],
+			recursive=True
+		)
+		try:
+			return list(view.view)
+		finally:
+			view.Destroy()
 
 	def _get_guest_id(self, vim_vm) -> typing.Union[str, None]:
 		"""
@@ -774,6 +806,13 @@ class VirtualMachine:
 		The time the VM was booted
 		"""
 		return self._vim_vm.runtime.bootTime
+	
+	@property
+	def is_template(self) -> bool:
+		"""
+		Whether this VM is an inventory 'Template' object in vCenter.
+		"""
+		return bool(getattr(self._vim_vm.config, "template", False))
 
 	@property
 	def vcpus(self) -> int:
@@ -878,6 +917,44 @@ class VirtualMachine:
 		"""
 		from esxi_utils.vm.types.ostype import OSType
 		return OSType.Unknown
+
+	def assert_vcenter(self, err: typing.Optional[str]):
+		"""
+		Raises an exception if the VM is not part of a vCenter inventory.
+		"""
+		about = self._client._service_instance.content.about
+		if str(getattr(about, "apiType", "")).lower() != "virtualcenter":
+			err_msg = err if err else "The requested operation requires a vCenter connection (apiType != VirtualCenter)."
+			raise Exception(err_msg)
+		
+	def to_template(self) -> 'VirtualMachine':
+		"""
+		Converts a VM to a template that can be quickly cloned (~two minutes) into new Virtual Machines.
+		"""
+		self.assert_vcenter("Template operations require a vCenter connection (apiType != VirtualCenter).")
+		if self.is_template:
+			return self
+		self.assert_powered_off()
+		try:
+			self._vim_vm.MarkAsTemplate()
+		except pyVmomi.vmodl.MethodFault as e:
+			raise Exception(f"Failed to convert VM '{self.name}' to template: {str(e)}")
+		return self
+	
+	# def deploy_from_template(self, name: str) -> 'VirtualMachine':
+	# 	"""
+	# 	Attempts to deploy a VM from this template. This VM must already be marked as a template in order for this function to succeed without error (see to_template())
+
+	# 	:param name: Name of the new VM.
+	# 	"""
+	# 	self.assert_vcenter("Template operations require a vCenter connection (apiType != VirtualCenter).")
+	# 	if not self.is_template:
+	# 		raise TypeError(f"'{self.name}' is not a template (config.template != True).")
+		
+	# 	if not isinstance(name, str) or not name.strip():
+	# 		raise ValueError("name must be a non-empty string")
+		
+	# 	# TODO finish implementing this method
 
 	def used_space(self, unit: str = "KB") -> int:
 		"""
