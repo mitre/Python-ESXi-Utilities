@@ -1563,12 +1563,36 @@ class VirtualMachine:
 
 	@property
 	def _vim_vm(self):
+		"""
+		The VM object in pyVmomi
+		"""
 		vm = pyVmomi.vim.VirtualMachine(self.id)
 		vm._stub = self._client._service_instance._stub
 		return vm
 
+	@property
+	def host_system(self) -> typing.Optional[pyVmomi.vim.HostSystem]:
+		"""
+		The ESXi host this VM is currently running on (or last ran on).
+		For templates this is usually None.
+		"""
+		try:
+			return getattr(self._vim_vm.runtime, "host", None) or getattr(self._vim_vm.summary.runtime, "host", None)
+		except pyVmomi.vmodl.fault.ManagedObjectNotFound:
+			return None
+
+	@property
+	def host_name(self) -> typing.Optional[str]:
+		hs = self.host_system
+		return hs.name if hs else None
+
 	def __str__(self):
-		return f"<{type(self).__name__} '{self.name}' on {self._client.hostname}>"
+		host = self.host_name
+		# Templates often have no runtime.host; powered-off VMs may show the last host.
+		if not host:
+			# Fallback: show the vCenter/selected client host context
+			host = self._client.hostname
+		return f"<{type(self).__name__} '{self.name}' on {str(host)}>"
 
 	def __repr__(self):
 		return str(self)

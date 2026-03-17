@@ -8,6 +8,7 @@ This page was created to track changes to versions of Python-ESXi-Utilities (esx
     - From: Being scoped just to the 'child' server in a vCenter
     - To: All available virtual machines as visible via the vCenter inventory
     - The old method of getting a list of virtual machines is available by specifying legacy_list=True to the ESXiClient object when creating it
+- VirtualMachine to 'str' now attempts to show the runtime host instead of the connected child server in vCenter
 - Adds support for Virtual Machine 'Templates' in vCenter arrangements
     - vm.is_template() for determining if a VM has been converted to a template
     - vm.to_template() to convert a VM to a clonable template (THIS CANNOT BE UNDONE)
