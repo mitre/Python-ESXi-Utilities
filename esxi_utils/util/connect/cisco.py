@@ -1,5 +1,14 @@
 from esxi_utils.util.connect.ssh import SSHConnection
 from dateutil.parser import parse as parsetime
+
+# Silence the deprecation warning for pkg_resources for now
+import warnings
+warnings.filterwarnings(
+    "ignore",
+    category=DeprecationWarning,
+    module=r"pkg_resources",
+)
+
 import pkg_resources
 import datetime
 import textfsm
