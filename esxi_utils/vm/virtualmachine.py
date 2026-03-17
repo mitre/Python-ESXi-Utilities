@@ -153,7 +153,7 @@ class VirtualMachineList:
 		uefi_boot: typing.Optional[bool] = None,
 	) -> 'VirtualMachine':
 		"""
-		Create a pre-configured VM.
+		Create a pre-configured VM. The VM will be created on the same host as the 'child' host setting in vCenter.
 
 		:param name: 
 			The name of the new VM.
@@ -336,7 +336,7 @@ class VirtualMachineList:
 
 	def upload(self, file: typing.Union[str, OvfFile], datastore: typing.Union[str, 'Datastore'], name: typing.Optional[str] = None, network_mappings: typing.Optional[typing.Dict[str, str]] = None, folder_name: typing.Optional[str] = None) -> 'VirtualMachine':
 		"""
-		Uploads a local OVF or OVA file to the provided datastore as a new VM.
+		Uploads a local OVF or OVA file to the provided datastore as a new VM. On vCenter, the VM will be created on the same 'child' host that this client was connected to.
 
 		:param file: A path to a .ovf/.ova file (string), or an `OvfFile` object.
 		:param datastore: The datastore where the VM should be created. This can be provided as a string (the name of the datastore) or as a `Datastore` object.
@@ -621,7 +621,9 @@ class VirtualMachineList:
 		return None
 
 	def __str__(self):
-		return f"<{type(self).__name__} for {self._client.hostname} ({len(self.items)} virtual machines)>"
+		if self.is_legacy_list:
+			return f"<{type(self).__name__} for {self._client.hostname} ({len(self.items)} virtual machines)>"
+		return f"<{type(self).__name__} for inventory ({len(self.items)} virtual machines)>"
 
 	def __repr__(self):
 		return str(self)
@@ -1573,7 +1575,7 @@ class VirtualMachine:
 	@property
 	def host_system(self) -> typing.Optional[pyVmomi.vim.HostSystem]:
 		"""
-		The ESXi host this VM is currently running on (or last ran on).
+		The ESXi host system this VM is currently running on (or last ran on).
 		For templates this is usually None.
 		"""
 		try:
@@ -1582,12 +1584,15 @@ class VirtualMachine:
 			return None
 
 	@property
-	def host_name(self) -> typing.Optional[str]:
+	def esxi_host_name(self) -> typing.Optional[str]:
+		"""
+		This is the ESXi host (child in vCenter) in which this VM resides on in the entire inventory.
+		"""
 		hs = self.host_system
 		return hs.name if hs else None
 
 	def __str__(self):
-		host = self.host_name
+		host = self.esxi_host_name
 		# Templates often have no runtime.host; powered-off VMs may show the last host.
 		if not host:
 			# Fallback: show the vCenter/selected client host context
