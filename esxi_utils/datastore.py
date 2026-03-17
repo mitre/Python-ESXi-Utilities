@@ -841,7 +841,7 @@ class DatastoreFile:
 		
 		if filepath.startswith("["):
 			try:
-				match = re.match("\[(" + "|".join([ re.escape(name) for name in client.datastores.names ]) + ")\]\s*(.+)", filepath, flags=re.IGNORECASE)
+				match = re.match(r"\[(" + "|".join([ re.escape(name) for name in client.datastores.names ]) + r")\]\s*(.+)", filepath, flags=re.IGNORECASE)
 				datastore_name = match.group(1)
 				relative_path = match.group(2).lstrip("/")
 				return DatastoreFile(client.datastores.get(datastore_name), relative_path)

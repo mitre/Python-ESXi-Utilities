@@ -99,7 +99,7 @@ class Firewall:
 		:param new_tree: The `etree` XML object to write to the service file.
 		"""
 		new_content = etree.tostring(new_tree, pretty_print=True, encoding='unicode')
-		new_content = re.sub(r"</service>", "\g<0>\n", new_content, flags=re.MULTILINE)
+		new_content = re.sub(r"</service>", r"\g<0>\n", new_content, flags=re.MULTILINE)
 		with self._client.ssh() as conn:
 			err = None
 			try:

@@ -214,7 +214,7 @@ class PanosAPIConnection:
 			routes.append(value)
 
 		flags = {}
-		for m in re.findall('[^\s,]+:[^\s,]+', xml.findtext("./result/flags")):
+		for m in re.findall(r'[^\s,]+:[^\s,]+', xml.findtext("./result/flags")):
 			field, value = m.split(':')
 			flags[field] = value
 

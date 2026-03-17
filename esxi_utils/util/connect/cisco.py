@@ -173,7 +173,7 @@ class CiscoSSHConnection(SSHConnection):
 		"""
 		# Remove empty lines and whitespace lines
 		lines = list(filter(lambda str: str and not str.isspace(),stringtable.splitlines()))
-		regex = re.compile('\s*'+'\s*'.join([re.escape(head) for head in headers])+'\s*')
+		regex = re.compile(r'\s*'+r'\s*'.join([re.escape(head) for head in headers])+r'\s*')
 		
 		# Find the header of the table
 		while lines and not regex.match(lines[0]):
