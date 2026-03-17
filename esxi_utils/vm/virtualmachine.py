@@ -1011,8 +1011,8 @@ class VirtualMachine:
 			location=relocate,
 		)
 
-		new_vim_vm = self._client._wait_for_task(self._vim_vm.CloneVM_Task(folder=folder, name=name, spec=clone_spec))
-		return new_vim_vm
+		self._client._wait_for_task(self._vim_vm.CloneVM_Task(folder=folder, name=name, spec=clone_spec))
+		return self._client.vms.get(name)
 
 	def used_space(self, unit: str = "KB") -> int:
 		"""
