@@ -977,14 +977,14 @@ class VirtualMachine:
 		folder = folder = VirtualMachineList._get_folder(root_folder, folder_name)
 
 		target_host = getattr(self._client, "_host_system", None)
-		if resource_pool is None:
-			if target_host is None:
-				try:
-					resource_pool = self._vim_vm.resourcePool
-				except Exception:
-					resource_pool = None
-			else:
-				resource_pool = target_host.parent.resourcePool
+		resource_pool = None
+		if target_host is None:
+			try:
+				resource_pool = self._vim_vm.resourcePool
+			except Exception:
+				resource_pool = None
+		else:
+			resource_pool = target_host.parent.resourcePool
 
 		relocate = pyVmomi.vim.vm.RelocateSpec()
 		if target_host is not None:
