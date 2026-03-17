@@ -579,8 +579,8 @@ class VirtualMachineList:
 		content = self._client._content()
 
 		# If caller provided a container, use it
-		if self._container is not None:
-			container = self._container
+		if self.container is not None:
+			container = self.container
 		else:
 			# vCenter: default to inventory-wide search
 			if self._client.is_vcenter():
