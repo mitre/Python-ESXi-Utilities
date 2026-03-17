@@ -941,20 +941,66 @@ class VirtualMachine:
 			raise Exception(f"Failed to convert VM '{self.name}' to template: {str(e)}")
 		return self
 	
-	# def deploy_from_template(self, name: str) -> 'VirtualMachine':
-	# 	"""
-	# 	Attempts to deploy a VM from this template. This VM must already be marked as a template in order for this function to succeed without error (see to_template())
+	def deploy_from_template(
+			self,
+			name: str,
+			datastore: typing.Union[str, 'Datastore'],
+			folder_name: typing.Optional[str] = None,
+			power_on: bool = False,
+		) -> 'VirtualMachine':
+		"""
+		Attempts to deploy a VM from this template. This VM must already be marked as a template in order for this function to succeed without error (see to_template())
 
-	# 	:param name: Name of the new VM.
-	# 	"""
-	# 	self.assert_vcenter("Template operations require a vCenter connection (apiType != VirtualCenter).")
-	# 	if not self.is_template:
-	# 		raise TypeError(f"'{self.name}' is not a template (config.template != True).")
+		:param name: Name of the new VM.
+		:param datastore: The datastore where the VM should be created. This can be provided as a string (the name of the datastore) or as a `Datastore` object.
+		:param folder_name: The location in the datastore to place the VM (will be auto-assigned to datastore root if 'None')
+		:power_on: Whether to turn the VM on or not after the clone (template deploy) operation
+		"""
+		self.assert_vcenter("Template operations require a vCenter connection (apiType != VirtualCenter).")
+		if not self.is_template:
+			raise TypeError(f"'{self.name}' is not a template (config.template != True).")
 		
-	# 	if not isinstance(name, str) or not name.strip():
-	# 		raise ValueError("name must be a non-empty string")
+		if not isinstance(name, str) or not name.strip():
+			raise ValueError("VM 'name' must be a non-empty string")
 		
-	# 	# TODO finish implementing this method
+		if name in self._client.vms.names:
+			raise exceptions.VirtualMachineExistsError(name)
+		
+		if isinstance(datastore, str):
+			datastore = self._client.datastores.get(datastore)
+		if not isinstance(datastore, Datastore):
+			raise TypeError(f"'datastore' is not a valid Datastore object (nor a valid string name for the datastore)")
+		
+		root_folder = datastore._datacenter.vmFolder
+		folder = folder = VirtualMachineList._get_folder(root_folder, folder_name)
+
+		target_host = getattr(self._client, "_host_system", None)
+		if resource_pool is None:
+			if target_host is None:
+				try:
+					resource_pool = self._vim_vm.resourcePool
+				except Exception:
+					resource_pool = None
+			else:
+				resource_pool = target_host.parent.resourcePool
+
+		relocate = pyVmomi.vim.vm.RelocateSpec()
+		if target_host is not None:
+			relocate.host = target_host
+		if resource_pool is not None:
+			relocate.pool = resource_pool
+		if datastore is not None:
+			# pyVmomi expects vim.Datastore here, not your wrapper
+			relocate.datastore = datastore._vim_datastore if hasattr(datastore, "_vim_datastore") else datastore._datastore  # adapt to your wrapper internals
+
+		clone_spec = pyVmomi.vim.vm.CloneSpec(
+			powerOn=power_on,
+			template=False,
+			location=relocate,
+		)
+
+		new_vim_vm = self._client._wait_for_task(self._vim_vm.CloneVM_Task(folder=folder, name=name, spec=clone_spec))
+		return self.get(str(new_vim_vm._moId), search_type='id')
 
 	def used_space(self, unit: str = "KB") -> int:
 		"""
