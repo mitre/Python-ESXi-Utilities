@@ -948,6 +948,8 @@ class VirtualMachine:
 			name: str,
 			datastore: typing.Union[str, 'Datastore'],
 			folder_name: typing.Optional[str] = None,
+			host: typing.Optional[typing.Union[str, pyVmomi.vim.HostSystem]] = None,
+			resource_pool: typing.Optional[pyVmomi.vim.ResourcePool] = None,
 			power_on: bool = False,
 		) -> 'VirtualMachine':
 		"""
@@ -956,6 +958,8 @@ class VirtualMachine:
 		:param name: Name of the new VM.
 		:param datastore: The datastore where the VM should be created. This can be provided as a string (the name of the datastore) or as a `Datastore` object.
 		:param folder_name: The location in the datastore to place the VM (will be auto-assigned to datastore root if 'None')
+		:param host: The host to place the new VM on (in vCenter the 'child' ESXi server).
+		:param resource_pool: The resource pool to place the VM in. If you want to use the 'host' param pool leave this set to 'None'.
 		:power_on: Whether to turn the VM on or not after the clone (template deploy) operation
 		"""
 		self.assert_vcenter("Template operations require a vCenter connection (apiType != VirtualCenter).")
@@ -976,14 +980,20 @@ class VirtualMachine:
 		root_folder = datastore._datacenter.vmFolder
 		folder = folder = VirtualMachineList._get_folder(root_folder, folder_name)
 
-		target_host = getattr(self._client, "_host_system", None)
-		resource_pool = None
-		if target_host is None:
-			try:
-				resource_pool = self._vim_vm.resourcePool
-			except Exception:
-				resource_pool = None
-		else:
+		if host is None:
+			target_host = getattr(self._client, "_host_system", None)
+		elif isinstance(host, pyVmomi.vim.HostSystem):
+			target_host = host
+		elif isinstance(host, str):
+			host_key = host.strip().lower()
+			matches = [h for h in self._client._all_host_systems if h.name.strip().lower() == host_key]
+			if not matches:
+				raise Exception(f"Unable to locate ESXi child host with name: {host}")
+			if len(matches) > 1:
+				raise exceptions.MultipleHostSystemsFoundError(self._client._all_host_systems)
+			target_host = matches[0]
+
+		if resource_pool is None and target_host is not None:
 			resource_pool = target_host.parent.resourcePool
 
 		relocate = pyVmomi.vim.vm.RelocateSpec()
@@ -1002,7 +1012,7 @@ class VirtualMachine:
 		)
 
 		new_vim_vm = self._client._wait_for_task(self._vim_vm.CloneVM_Task(folder=folder, name=name, spec=clone_spec))
-		return self.get(str(new_vim_vm._moId), search_type='id')
+		return new_vim_vm
 
 	def used_space(self, unit: str = "KB") -> int:
 		"""
