@@ -5,8 +5,8 @@ from dateutil.parser import parse as parsetime
 import warnings
 warnings.filterwarnings(
     "ignore",
-    category=DeprecationWarning,
-    module=r"pkg_resources",
+    category=UserWarning,
+    message=r".*pkg_resources is deprecated as an API.*",
 )
 
 import pkg_resources

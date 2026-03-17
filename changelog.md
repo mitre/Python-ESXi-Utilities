@@ -14,6 +14,7 @@ This page was created to track changes to versions of Python-ESXi-Utilities (esx
     - vm.deploy_from_template(...) to create a new VM from a VM template
 - Adds a new client.is_vcenter() method to the ESXi client object
 - Fix several regex warnings from this library in Python version 3.12+ by adding the 'raw string' character in front of the regex strings
+- Silences the deprecation warning coming from this library about the pinning of setuptools pkg_resources API
 
 ## 3.22.1
 
