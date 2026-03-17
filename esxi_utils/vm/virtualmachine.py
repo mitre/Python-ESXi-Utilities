@@ -151,6 +151,8 @@ class VirtualMachineList:
 		folder_name: typing.Optional[str] = None,
 		video_card_auto_detect: typing.Optional[bool] = None,
 		uefi_boot: typing.Optional[bool] = None,
+		host: typing.Optional[typing.Union[str, pyVmomi.vim.HostSystem]] = None,
+		resource_pool: typing.Optional[pyVmomi.vim.ResourcePool] = None
 	) -> 'VirtualMachine':
 		"""
 		Create a pre-configured VM. The VM will be created on the same host as the 'child' host setting in vCenter.
@@ -175,6 +177,10 @@ class VirtualMachineList:
 			Will throw an esxi_utils 'MultipleFoldersFoundError' exception if more than one folder is found with the given name.
 		:param uefi_boot:
 			When set to 'True' this VM will be created to emulate secure boot mode (UEFI) instead of BIOS (legacy) boot mode (BIOS is default).
+		:param host:
+			The ESXi host server on which to deploy this VM ('child' server in vCenter). When this is 'None', the legacy operation will be performed whereby this VM will be deployed on the same host as the 'child' connected to via this client.
+		:param resource_pool:
+			The resource pool to place the VM in. If you want to use the 'host' param pool leave this set to 'None'.
 
 		:return: A `VirtualMachine` object (or subtype) for the new VM.
 		"""
@@ -236,15 +242,31 @@ class VirtualMachineList:
 
 			config.deviceChange.append(video_card)
 
+		# Configure destination host and resource pool
+		if host is None:
+			target_host = getattr(self._client, "_host_system", None)
+		elif isinstance(host, pyVmomi.vim.HostSystem):
+			target_host = host
+		elif isinstance(host, str):
+			host_key = host.strip().lower()
+			matches = [h for h in self._client._all_host_systems if h.name.strip().lower() == host_key]
+			if not matches:
+				raise Exception(f"Unable to locate ESXi child host with name: {host}")
+			if len(matches) > 1:
+				raise exceptions.MultipleHostSystemsFoundError(self._client._all_host_systems)
+			target_host = matches[0]
+
+		if resource_pool is None and target_host is not None:
+			resource_pool = target_host.parent.resourcePool
+
 		# Add VM
-		destination_host = self._client._host_system
 		root_folder = datastore._datacenter.vmFolder
 		folder = VirtualMachineList._get_folder(root_folder, folder_name)
 		
 		vim_vm = self._client._wait_for_task(folder.CreateVM_Task(
 			config,
-			pool=destination_host.parent.resourcePool,
-			host=destination_host
+			pool=resource_pool,
+			host=target_host
 		))
 		return self.get(str(vim_vm._moId), search_type='id')
 
@@ -334,7 +356,16 @@ class VirtualMachineList:
 		log.debug(f'VM will upload in folder name: {folder.name}')
 		return folder
 
-	def upload(self, file: typing.Union[str, OvfFile], datastore: typing.Union[str, 'Datastore'], name: typing.Optional[str] = None, network_mappings: typing.Optional[typing.Dict[str, str]] = None, folder_name: typing.Optional[str] = None) -> 'VirtualMachine':
+	def upload(
+			self,
+			file: typing.Union[str, OvfFile],
+			datastore: typing.Union[str, 'Datastore'],
+			name: typing.Optional[str] = None,
+			network_mappings: typing.Optional[typing.Dict[str, str]] = None,
+			folder_name: typing.Optional[str] = None,
+			host: typing.Optional[typing.Union[str, pyVmomi.vim.HostSystem]] = None,
+			resource_pool: typing.Optional[pyVmomi.vim.ResourcePool] = None
+		) -> 'VirtualMachine':
 		"""
 		Uploads a local OVF or OVA file to the provided datastore as a new VM. On vCenter, the VM will be created on the same 'child' host that this client was connected to.
 
@@ -346,6 +377,10 @@ class VirtualMachineList:
 			The folder to contain the new VM. The default is the 'root' VMs folder (if the value 'None' is provided)
 			Will create a new folder if one is not found with a matching name.
 			Will throw an esxi_utils 'MultipleFoldersFoundError' exception if more than one folder is found with the given name.
+		:param host:
+			The ESXi host server on which to deploy this VM ('child' server in vCenter). When this is 'None', the legacy operation will be performed whereby this VM will be deployed on the same host as the 'child' connected to via this client.
+		:param resource_pool:
+			The resource pool to place the VM in. If you want to use the 'host' param pool leave this set to 'None'.
 		
 		:return: A `virtualmachine.VirtualMachine` object for the new VM.
 		"""
@@ -392,9 +427,25 @@ class VirtualMachineList:
 				raise exceptions.OvfImportError(file.path, datastore.name, name, str(f"unable to map network {network_name} to {mapped_to}. Reason: {e}"))
 			mappings.append(pyVmomi.vim.OvfManager.NetworkMapping(name=network_name, network=network_obj))
 
+		# Configure destination host and resource pool
+		if host is None:
+			target_host = getattr(self._client, "_host_system", None)
+		elif isinstance(host, pyVmomi.vim.HostSystem):
+			target_host = host
+		elif isinstance(host, str):
+			host_key = host.strip().lower()
+			matches = [h for h in self._client._all_host_systems if h.name.strip().lower() == host_key]
+			if not matches:
+				raise Exception(f"Unable to locate ESXi child host with name: {host}")
+			if len(matches) > 1:
+				raise exceptions.MultipleHostSystemsFoundError(self._client._all_host_systems)
+			target_host = matches[0]
+
+		if resource_pool is None and target_host is not None:
+			resource_pool = target_host.parent.resourcePool
+
 		# Create import spec
 		log.debug(f"Creating import spec...")
-		resource_pool = self._client._host_system.parent.resourcePool
 		import_spec = self._client._service_instance.content.ovfManager.CreateImportSpec(
 			ovfDescriptor=file.descriptor.xml(pretty_print=True, xml_declaration=True),
 			resourcePool=resource_pool,
@@ -451,7 +502,7 @@ class VirtualMachineList:
 		lease = resource_pool.ImportVApp(
 			spec=import_spec.importSpec,
 			folder=folder,
-			host=self._client._host_system
+			host=target_host
 		)
 
 		# Wait for ready
@@ -980,6 +1031,7 @@ class VirtualMachine:
 		root_folder = datastore._datacenter.vmFolder
 		folder = folder = VirtualMachineList._get_folder(root_folder, folder_name)
 
+		# Configure destination host and resource pool
 		if host is None:
 			target_host = getattr(self._client, "_host_system", None)
 		elif isinstance(host, pyVmomi.vim.HostSystem):
