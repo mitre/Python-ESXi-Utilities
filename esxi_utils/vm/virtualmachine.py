@@ -1188,15 +1188,19 @@ class VirtualMachine:
 			return
 		self._client._wait_for_task(self._vim_vm.PowerOnVM_Task(host=self._client._host_system))
 
-	def power_off(self, idempotent: bool = False):
+	def power_off(self, idempotent: bool = False, hard_stop: bool = False):
 		"""
 		Powers off the VM.
 
 		:param idempotent: If `True` and the VM is already powered on, this will do nothing rather than throwing an error.
+		:param hard_stop: If `True` will attempt to force stop the VM (extremely non-graceful power-off). This should only be used if you intend to delete a VM or the VM is in some unrecoverable state.
 		"""
 		if self.powered_off and not idempotent:
 			raise exceptions.VirtualMachineAlreadyPoweredOffError(self.name)
 		elif self.powered_off:
+			return
+		if hard_stop:
+			self._vim_vm.Stop()
 			return
 		self._client._wait_for_task(self._vim_vm.PowerOffVM_Task())
 
