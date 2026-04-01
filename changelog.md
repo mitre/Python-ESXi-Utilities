@@ -2,6 +2,26 @@
 
 This page was created to track changes to versions of Python-ESXi-Utilities (esxi_utils). The changelog was created in v3.22.1 and only changes starting from that version are tracked here.
 
+## 4.0.0
+
+- Changes the default method of retrieving VirtualMachine objects from their list
+    - From: Being scoped just to the 'child' server in a vCenter
+    - To: All available virtual machines as visible via the vCenter inventory
+    - The old method of getting a list of virtual machines is available by specifying legacy_list=True to the ESXiClient object when creating it
+- Adds support for Virtual Machine 'Templates' in vCenter arrangements
+    - vm.is_template() for determining if a VM has been converted to a template
+    - vm.to_template() to convert a VM to a clonable template (THIS CANNOT BE UNDONE)
+    - vm.deploy_from_template(...) to create a new VM from a VM template
+- Adds a new client.is_vcenter() method to the ESXi client object
+- Adds new properties to VirtualMachine object for determining their runtime (child) ESXi host:
+    - vm.host_system reveals the vim.HostSystem
+    - vm.esxi_host_name reveals the 'hostname' of the ESXi (child) server owning this VM's resources
+- Adds new parameters (host and resource_pool) to vm.create and vm.upload to control which ESXi (child) host and resource pool is deployed to (default is still the legacy operation of 'the currently connected host')
+- VirtualMachine to 'str' now attempts to show the runtime host instead of the connected child server in vCenter
+- Fix several regex warnings from this library in Python version 3.12+ by adding the 'raw string' character in front of the regex strings
+- Silences the deprecation warning coming from this library about the pinning of setuptools pkg_resources API
+- Adds 'hard_stop' parameter option (default False) to vm.power_off()
+
 ## 3.22.1
 
 - Adds metadata to pip package for PyPI

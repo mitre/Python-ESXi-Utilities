@@ -31,8 +31,10 @@ class ESXiClient:
 	:param child_hostname: When connecting to a vCenter instance, the hostname or IP of the child ESXi server.
 	:param child_username: When connecting to a vCenter instance, the username to login to the child ESXi server (for SSH).
 	:param child_password: When connecting to a vCenter instance, the password of the child ESXi user.
+	:param use_legacy_vm_list: When collecting all Virtual Machines from the ESXi server, this setting decides whether the VMs collected are only from the child server on vCenter (True) or if the VM list contains all VMs as seen via the vCenter inventory (False).
 	"""
-	def __init__(self, hostname: str, username: str, password: str, child_hostname: typing.Optional[str] = None, child_username: typing.Optional[str] = None, child_password: typing.Optional[str] = None):
+	def __init__(self, hostname: str, username: str, password: str, child_hostname: typing.Optional[str] = None, child_username: typing.Optional[str] = None, child_password: typing.Optional[str] = None, use_legacy_vm_list: bool = False):
+		self.use_legacy_vm_list = use_legacy_vm_list
 		context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
 		context.verify_mode = ssl.CERT_NONE
 		err = None
@@ -117,7 +119,7 @@ class ESXiClient:
 		"""
 		The Virtual Machine handler for this host.
 		"""
-		return VirtualMachineList(self)
+		return VirtualMachineList(self, container=None, legacy_list=self.use_legacy_vm_list)
 
 	@property
 	def firewall(self) -> 'Firewall':
@@ -280,6 +282,12 @@ class ESXiClient:
 	def __del__(self):
 		self.close()
 
+	def _content(self):
+		return self._service_instance.RetrieveContent()
+	
+	def is_vcenter(self) -> 'bool':
+		return str(self._content().about.apiType).lower() == "virtualcenter"
+
 	def _get_vim_objects_from(self, root, vim_type):
 		"""
 		Search the ESXi server for the all instances of the specified vim object under the given root object.
@@ -291,10 +299,11 @@ class ESXiClient:
 		"""
 		if not isinstance(vim_type, list):
 			vim_type = [vim_type]
-		content = self._service_instance.RetrieveContent()
-		container = content.viewManager.CreateContainerView(root, vim_type, True)
-		objs = [ ref for ref in container.view ]
-		container.Destroy()
+		try:
+			container = self._content().viewManager.CreateContainerView(root, vim_type, True)
+			objs = [ ref for ref in container.view ]
+		finally:
+			container.Destroy()
 		return objs
 
 	def _get_vim_objects(self, vim_type, query_root: bool = False):
@@ -309,7 +318,7 @@ class ESXiClient:
 		# request only content based on the currently connected 'host_system' server
 		if not query_root and self._child_hostname and self._host_system:
 			return self._get_vim_objects_from(self._host_system, vim_type)
-		return self._get_vim_objects_from(self._service_instance.RetrieveContent().rootFolder, vim_type)
+		return self._get_vim_objects_from(self._content().rootFolder, vim_type)
 
 	def _get_vim_object(self, vim_type, name: str):
 		"""

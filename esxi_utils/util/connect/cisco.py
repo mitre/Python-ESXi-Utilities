@@ -1,5 +1,14 @@
 from esxi_utils.util.connect.ssh import SSHConnection
 from dateutil.parser import parse as parsetime
+
+# Silence the deprecation warning for pkg_resources for now
+import warnings
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    message=r".*pkg_resources is deprecated as an API.*",
+)
+
 import pkg_resources
 import datetime
 import textfsm
@@ -173,7 +182,7 @@ class CiscoSSHConnection(SSHConnection):
 		"""
 		# Remove empty lines and whitespace lines
 		lines = list(filter(lambda str: str and not str.isspace(),stringtable.splitlines()))
-		regex = re.compile('\s*'+'\s*'.join([re.escape(head) for head in headers])+'\s*')
+		regex = re.compile(r'\s*'+r'\s*'.join([re.escape(head) for head in headers])+r'\s*')
 		
 		# Find the header of the table
 		while lines and not regex.match(lines[0]):
