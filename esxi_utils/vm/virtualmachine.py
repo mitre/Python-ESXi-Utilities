@@ -1200,7 +1200,9 @@ class VirtualMachine:
 		elif self.powered_off:
 			return
 		if hard_stop:
-			self._vim_vm.Stop()
+			self._vim_vm.TerminateVM()
+			# Since this is not a task, it is good to wait a bit for the VM to terminate
+			time.sleep(5)
 			return
 		self._client._wait_for_task(self._vim_vm.PowerOffVM_Task())
 

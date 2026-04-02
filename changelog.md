@@ -2,6 +2,10 @@
 
 This page was created to track changes to versions of Python-ESXi-Utilities (esxi_utils). The changelog was created in v3.22.1 and only changes starting from that version are tracked here.
 
+## 4.0.1
+
+- Bugfix for "hard_stop" argument not actually stopping the VM.
+
 ## 4.0.0
 
 - Changes the default method of retrieving VirtualMachine objects from their list
