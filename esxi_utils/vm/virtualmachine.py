@@ -1066,6 +1066,96 @@ class VirtualMachine:
 		self._client._wait_for_task(self._vim_vm.CloneVM_Task(folder=folder, name=name, spec=clone_spec))
 		return self._client.vms.get(name)
 
+	def clone_to_template(
+			self,
+			name: str,
+			datastore: typing.Optional[typing.Union[str, 'Datastore']] = None,
+			folder_name: typing.Optional[str] = None,
+			host: typing.Optional[typing.Union[str, pyVmomi.vim.HostSystem]] = None,
+			resource_pool: typing.Optional[pyVmomi.vim.ResourcePool] = None,
+		) -> 'VirtualMachine':
+		"""
+		Clones this VM into a new template using the vCenter API.
+
+		:param name: Name of the new template.
+		:param datastore: The datastore where the template should be created. This can be
+			provided as a string (the name of the datastore), a `Datastore` object, or `None`
+			to use the source VM's current datastore.
+		:param folder_name: The inventory folder path to place the template in. If `None`,
+			the datacenter VM root folder will be used.
+		:param host: The host to place the template on (in vCenter the child ESXi host).
+		:param resource_pool: The resource pool to place the template in. If `None` and
+			`host` is provided, the host's parent resource pool will be used. Otherwise the
+			source VM's resource pool will be used when available.
+		
+		:return: A `VirtualMachine` wrapper for the newly created template.
+		"""
+		self.assert_vcenter("Template clone operations require a vCenter connection (apiType != VirtualCenter).")
+
+		if not isinstance(name, str) or not name.strip():
+			raise ValueError("Template 'name' must be a non-empty string")
+
+		if name in self._client.vms.names:
+			raise exceptions.VirtualMachineExistsError(name)
+
+		self.assert_powered_off()
+
+		if datastore is None:
+			datastore = self.datastore
+		elif isinstance(datastore, str):
+			datastore = self._client.datastores.get(datastore)
+
+		if not isinstance(datastore, Datastore):
+			raise TypeError("'datastore' is not a valid Datastore object (nor a valid string name for the datastore)")
+
+		root_folder = datastore._datacenter.vmFolder
+		folder = VirtualMachineList._get_folder(root_folder, folder_name)
+
+		if host is None:
+			target_host = getattr(self._client, "_host_system", None)
+		elif isinstance(host, pyVmomi.vim.HostSystem):
+			target_host = host
+		elif isinstance(host, str):
+			host_key = host.strip().lower()
+			matches = [h for h in self._client._all_host_systems if h.name.strip().lower() == host_key]
+			if not matches:
+				raise Exception(f"Unable to locate ESXi child host with name: {host}")
+			if len(matches) > 1:
+				raise exceptions.MultipleHostSystemsFoundError(self._client._all_host_systems)
+			target_host = matches[0]
+		else:
+			raise TypeError("'host' must be None, a host name string, or a pyVmomi.vim.HostSystem")
+
+		if resource_pool is None:
+			if target_host is not None:
+				resource_pool = target_host.parent.resourcePool
+			elif getattr(self._vim_vm, "resourcePool", None) is not None:
+				resource_pool = self._vim_vm.resourcePool
+			elif getattr(getattr(self._vim_vm, "runtime", None), "host", None) is not None:
+				resource_pool = self._vim_vm.runtime.host.parent.resourcePool
+
+		relocate = pyVmomi.vim.vm.RelocateSpec()
+		if target_host is not None:
+			relocate.host = target_host
+		if resource_pool is not None:
+			relocate.pool = resource_pool
+		if datastore is not None:
+			relocate.datastore = datastore._vim_datastore if hasattr(datastore, "_vim_datastore") else datastore._datastore
+
+		clone_spec = pyVmomi.vim.vm.CloneSpec(
+			powerOn=False,
+			template=True,
+			location=relocate,
+		)
+
+		try:
+			task = self._vim_vm.CloneVM_Task(folder=folder, name=name, spec=clone_spec)
+			self._client._wait_for_task(task)
+		except pyVmomi.vmodl.MethodFault as e:
+			raise Exception(f"Failed to clone VM '{self.name}' to template '{name}': {str(e)}")
+
+		return self._client.vms.get(name)
+
 	def used_space(self, unit: str = "KB") -> int:
 		"""
 		Get the amount of space used on disk by this VM and its associated files.
