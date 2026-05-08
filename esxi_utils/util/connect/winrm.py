@@ -248,6 +248,39 @@ class WinRMConnection:
 		:return: A list of strings.
 		"""
 		return re.split("\n|\r\n", str(self.powershell(f"(Get-WmiObject -Class Win32_Product).Name", assert_status=0).stdout))
+	
+	def list_msi_uninstallers_in_registry(self, filter_str: typing.Optional[str] = None) -> typing.List[str]:
+		"""
+		Returns a list of display names of MSI uninstallers as recorded in the Windows registry.
+		This can be used as a faster (near instant) alternative to 'list_installed_packages'.
+
+		:param filter: An optional powershell filter to apply to only return matching results. Providing a filter does not appear to affect the speed at which the command completes. The filter applies against the 'DisplayName' key in the registry. An example filter is: *winlogbeat*
+		:return: A list of display name strings
+		"""
+
+		# These are the registry paths that represent MSI uninstall information
+		registry_paths: typing.List[str] = [
+			"'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',",
+			"'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'"
+		]
+
+		# This string will represent the first part of the command to retrieve entries from the registry
+		get_string: str = "Get-ItemProperty @("
+		for p in registry_paths:
+			get_string += p
+		get_string += ")"
+
+		# Only returns the DisplayName key from the information grabbed from the registry
+		select_string: str = "Select-Object DisplayName"
+		
+		# Optionally filter the DisplayName against the user provided string
+		if filter_str is not None:
+			where_string = "{ $_.DisplayName -like " + filter_str + " }"
+			cmd_string = f"{get_string} | {where_string} | {select_string}"
+		else:
+			cmd_string = f"{get_string} | {select_string}"
+
+		return re.split("\n|\r\n", self.powershell(cmd_string, assert_status=0).stdout)
 
 	def uninstall_package(self, name: str):
 		"""

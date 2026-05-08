@@ -2,6 +2,10 @@
 
 This page was created to track changes to versions of Python-ESXi-Utilities (esxi_utils). The changelog was created in v3.22.1 and only changes starting from that version are tracked here.
 
+## 4.2.0
+
+- Adds 'list_msi_uninstallers_in_registry' function to WinRM connections
+
 ## 4.1.0
 
 - Adds vm.clone_to_template() for creating a template from a VM without forcing it to full convert
