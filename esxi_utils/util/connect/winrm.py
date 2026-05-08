@@ -249,14 +249,19 @@ class WinRMConnection:
 		"""
 		return re.split("\n|\r\n", str(self.powershell(f"(Get-WmiObject -Class Win32_Product).Name", assert_status=0).stdout))
 	
-	def list_msi_uninstallers_in_registry(self, filter_str: typing.Optional[str] = None) -> typing.List[str]:
+	def list_msi_uninstallers_in_registry(self, display_name_only: bool, filter_str: typing.Optional[str] = None, other_select_str: typing.Optional[str] = None) -> str:
 		"""
 		Returns a list of display names of MSI uninstallers as recorded in the Windows registry.
 		This can be used as a faster (near instant) alternative to 'list_installed_packages'.
 
+		:param display_name_only: When True: will only Select-Object DisplayName instead of returning the whole stdout. This cannot be True alongside a non-None value for 'other_select_str'
 		:param filter: An optional powershell filter to apply to only return matching results. Providing a filter does not appear to affect the speed at which the command completes. The filter applies against the 'DisplayName' key in the registry. An example filter is: *winlogbeat*
-		:return: A list of display name strings
+		:param other_select_str: An optional string that designates what to select from the matched filter (or no filter). An example of this might be: UninstallString
+		:return: The stdout from the chain of commands. The actual content will vary greatly depending on your filter and the presence of display_name_only
 		"""
+
+		if display_name_only and other_select_str is not None:
+			exceptions.RemoteConnectionError(self, "Invalid inputs provided to function: 'list_msi_uninstallers_in_registry': you cannot specify both display_name_only and other_select_str. Combine DisplayName in the other_select_str if you wish to select multiple fields.")
 
 		# These are the registry paths that represent MSI uninstall information
 		registry_paths: typing.List[str] = [
@@ -269,18 +274,21 @@ class WinRMConnection:
 		for p in registry_paths:
 			get_string += p
 		get_string += ")"
-
-		# Only returns the DisplayName key from the information grabbed from the registry
-		select_string: str = "Select-Object DisplayName"
 		
 		# Optionally filter the DisplayName against the user provided string
 		if filter_str is not None:
-			where_string = "{ $_.DisplayName -like " + filter_str + " }"
-			cmd_string = f"{get_string} | {where_string} | {select_string}"
+			where_string = "Where-Object { $_.DisplayName -like '" + filter_str + "' }"
+			cmd_string = f"{get_string} | {where_string}"
 		else:
-			cmd_string = f"{get_string} | {select_string}"
+			cmd_string = f"{get_string}"
 
-		return re.split("\n|\r\n", self.powershell(cmd_string, assert_status=0).stdout)
+		if display_name_only:
+			# Only returns the DisplayName key from the information grabbed from the registry
+			cmd_string += " | Select-Object DisplayName"
+		elif other_select_str is not None:
+			cmd_string += f" | Select-Object {other_select_str}"
+
+		return self.powershell(cmd_string, assert_status=0).stdout
 
 	def uninstall_package(self, name: str):
 		"""
@@ -289,6 +297,19 @@ class WinRMConnection:
 		:param name: The exact name of the package to uninstall (refer to `list_installed_packages`).
 		"""
 		self.powershell(f"(Get-WmiObject -Class Win32_Product -Filter \"Name='{name}'\").Uninstall()", assert_status=0)
+
+	def uninstall_package_using_registry_guid(self, guid: str) -> typing.Tuple[int, str, str]:
+		"""
+		Uninstalls a packages on the remote Windows host using a GUID as designated in the remote registry.
+		You can discover this information using the 'list_msi_uninstallers_in_registry' function (e.g. filter_str="*winlogbeat*", other_select_str="UninstallString").
+		The GUID from "UninstallString" typically appears here: 'MsiExec.exe /X{GUID}'
+
+		:return: A tuple of (status_code int, stdout str, stderr str). Common status codes here are 0 for success, 1605 for product not installed, and 3010 for success but a reboot is required. You are responsible for checking the status code matches what you want.
+		"""
+		if not re.fullmatch(r"\{[0-9A-Fa-f\-]+\}", guid):
+			raise ValueError(f"Invalid MSI GUID (incorrect format for Windows): {guid}")
+		response = self.powershell(f'msiexec.exe /x "{guid}" /qn /norestart')
+		return (response.status, response.stdout, response.stderr)
 
 	def restart(self):
 		"""

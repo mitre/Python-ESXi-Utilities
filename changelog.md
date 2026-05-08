@@ -4,7 +4,7 @@ This page was created to track changes to versions of Python-ESXi-Utilities (esx
 
 ## 4.2.0
 
-- Adds 'list_msi_uninstallers_in_registry' function to WinRM connections
+- Adds 'list_msi_uninstallers_in_registry' and 'uninstall_package_using_registry_guid' functions to WinRM connections
 
 ## 4.1.0
 
