@@ -249,19 +249,21 @@ class WinRMConnection:
 		"""
 		return re.split("\n|\r\n", str(self.powershell(f"(Get-WmiObject -Class Win32_Product).Name", assert_status=0).stdout))
 	
-	def list_msi_uninstallers_in_registry(self, display_name_only: bool, filter_str: typing.Optional[str] = None, other_select_str: typing.Optional[str] = None) -> str:
+	def list_msi_uninstallers_in_registry(
+			self,
+			expand_property: bool = False,
+			filter_str: typing.Optional[str] = None,
+			select_str: typing.Optional[str] = None,
+		) -> str:
 		"""
 		Returns a list of display names of MSI uninstallers as recorded in the Windows registry.
 		This can be used as a faster (near instant) alternative to 'list_installed_packages'.
-
-		:param display_name_only: When True: will only Select-Object DisplayName instead of returning the whole stdout. This cannot be True alongside a non-None value for 'other_select_str'
+		
+		:param expand_property: When True: will show only the value of the property returned by the select_str result instead of the formatting that powershell normally outputs (i.e. keyname, many hyphens to indicate a row or column, then the property value). This doesn't do anything when select_str is None.
 		:param filter: An optional powershell filter to apply to only return matching results. Providing a filter does not appear to affect the speed at which the command completes. The filter applies against the 'DisplayName' key in the registry. An example filter is: *winlogbeat*
-		:param other_select_str: An optional string that designates what to select from the matched filter (or no filter). An example of this might be: UninstallString
+		:param select_str: An optional string that designates what to select from the matched filter (or no filter). An example of this might be: DisplayName or: UninstallString or both together: DisplayName,UninstallString
 		:return: The stdout from the chain of commands. The actual content will vary greatly depending on your filter and the presence of display_name_only
 		"""
-
-		if display_name_only and other_select_str is not None:
-			exceptions.RemoteConnectionError(self, "Invalid inputs provided to function: 'list_msi_uninstallers_in_registry': you cannot specify both display_name_only and other_select_str. Combine DisplayName in the other_select_str if you wish to select multiple fields.")
 
 		# These are the registry paths that represent MSI uninstall information
 		registry_paths: typing.List[str] = [
@@ -282,11 +284,13 @@ class WinRMConnection:
 		else:
 			cmd_string = f"{get_string}"
 
-		if display_name_only:
-			# Only returns the DisplayName key from the information grabbed from the registry
-			cmd_string += " | Select-Object DisplayName"
-		elif other_select_str is not None:
-			cmd_string += f" | Select-Object {other_select_str}"
+		# Optionally select property values from a user provided string
+		if select_str is not None:
+			# Optionally show only the value(s) and neither the key name nor the row/column formatting
+			if expand_property:
+				cmd_string += f" | Select-Object -ExpandProperty {select_str}"
+			else:
+				cmd_string += f" | Select-Object {select_str}"
 
 		return self.powershell(cmd_string, assert_status=0).stdout
 
@@ -301,7 +305,7 @@ class WinRMConnection:
 	def uninstall_package_using_registry_guid(self, guid: str) -> typing.Tuple[int, str, str]:
 		"""
 		Uninstalls a packages on the remote Windows host using a GUID as designated in the remote registry.
-		You can discover this information using the 'list_msi_uninstallers_in_registry' function (e.g. filter_str="*winlogbeat*", other_select_str="UninstallString").
+		You can discover this information using the 'list_msi_uninstallers_in_registry' function (e.g. filter_str="*winlogbeat*", select_str="UninstallString").
 		The GUID from "UninstallString" typically appears here: 'MsiExec.exe /X{GUID}'
 
 		:return: A tuple of (status_code int, stdout str, stderr str). Common status codes here are 0 for success, 1605 for product not installed, and 3010 for success but a reboot is required. You are responsible for checking the status code matches what you want.
