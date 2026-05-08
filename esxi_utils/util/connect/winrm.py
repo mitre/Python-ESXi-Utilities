@@ -267,8 +267,8 @@ class WinRMConnection:
 
 		# These are the registry paths that represent MSI uninstall information
 		registry_paths: typing.List[str] = [
-			"'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',",
-			"'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'"
+			r"'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',",
+			r"'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'"
 		]
 
 		# This string will represent the first part of the command to retrieve entries from the registry
